@@ -1,0 +1,247 @@
+﻿1介绍 安装环境
+需要搜索快，相关度排序，需要全文搜索技术实现搜索功能
+也是分布式的，集群也依赖zookeeper
+使用solr实现搜索扩展性好，减少工作量，提供了完备的搜索方案
+java开发，apache项目，
+可以独立运行，也可以运行在tomcat中
+架构图
+服务器访问solr 然后让solr访问db
+solr定时和db数据同步
+2环境安装
+1下载 http://archive.apache.org/dist/lucene/solr/
+2解压
+tar -zxvf solr-4.10.3.tgz.tar
+cd solr-4.10.3/example/webapps/
+拷贝 war放入tomcat的webapps下
+cp solr.war /usr/local/apache-tomcat-7.0.29/webapps/
+mkdir solr && unzip solr.war -d solr && rm -rf solr.war
+vim solr/WEB-INF/web.xml
+找到nv-entry 修改solr/home地址：/usr/;ocal/solr-4.10.3/example/solr
+保存并退出
+拷贝相关jar包到tomcat下
+cd /usr/local/solr-4.10.3/example/lib/ext && cp * /usr/local/apache-tomcat-7.0.29/lib/ext
+启动tomcat即可
+/usr/local/apache-tomcat-7.0.29/bin/startup.sh
+tail -500 /usr/local/apache-tomcat-7.0.29/logs/catalina.out
+访问http://192.168.1.114:8080/solr 到solr的主页
+
+
+
+在/usr/local/solr-4.10.3/example/solr/collection1/conf/schema.xml
+这个xml中定义了很多fields 很多索引字段
+一张表中字段叫name field中也有name这个字段
+我们需要做的事把name的值给solr中。solr并不是通过数据库，而是内部过滤出来了
+内存级别的查询
+
+通过管控台提交数据
+选中collection1 然后点击documents
+然后往里写 一些json 然后submitdocument 
+相当于往里插一些数据
+
+点击query
+点击execute query
+
+如果自己业务没有索引，那么得在xml文件中配置
+
+
+
+springtest
+@ContextConfiguration(locations={"classpath:applicationContext.xml"})
+@TransactionConfiguration(transactionManager = "transactionManager",defaultRollBack = false)
+@RunWith(SpringJunit4ClassRunner.class)
+@TransactionConal(rollbackFor = Exception.class)
+class TestSolr1{
+	SolrServer solrServer = new HttpSolrServer("http:192.168.1.114:8080/solr")
+SolrInputDocument doc1 = new SolrInputDocument();
+doc1.setField("id","1001")
+doc1.setField("name","xxx")
+SolrInputDocument doc2 = new SolrInputDocument();
+doc1.setField("id","1002")
+doc1.setField("name","xxx")
+solrServer.add(doc1)
+solrServer.add(doc2)
+solrServer.commit()
+
+
+}
+
+testQuery(){
+	SolrServer solrServer = new HttpSolrServer("http:192.168.1.114:8080/solr")
+	SolrQuery solrQuery = new SolrQuery()
+	//查询关键词 fq sort startRows fl df ...
+	AND OR NOT 条件
+	"name:shou AND price:9"
+	"name:shou AND price:[6 TO 9]" <=6 <=9
+	price:{6 TO 9}
+	
+	solrQuery.set("q","name:手机")；
+	QueryResponse response = solrServer.query(solrQuery);
+	SolrDocumentList solrList = response.getResult();
+	long num = solrList.getNumFound();
+	for(SolrDocument sd:solrList){
+		String id = (String)sd.get("id")
+		....
+	
+	
+	}
+}
+
+
+testDel(){
+	SolrServer solrServer = new HttpSolrServer("http:192.168.1.114:8080/solr")
+	solrServer.deleteById("1")
+	solrServer.deleteByQuery("id:1001 id:1002")
+	solrServer.commit()
+
+
+
+
+}
+
+jar包
+org.apache.solr solr-solrj
+
+1信息源->solr服务器进行加工处理（分词器：一句话加工成分开来的词）->建立索引库（很多个文件）
+2搜索的时候从本地的索引库信息集合中搜索
+3文本在建立索引和搜索时，会进行分词器
+4索引结构：一边是全量文件一边是索引表
+1索引表（具体词汇，哪些词汇放入哪些文档存储）
+2存放数据（具体的数据）
+
+5查询条件进来也会先分词器，然后去查索引结构，最后返回具体的文档数据
+6索引库位置
+7store是否进行存储（可不存可存）
+8index是否进行索引
+
+
+
+
+中文分词器 查看分词结果
+在控制台中国的analusis中可以查询分词器 然后输入后点分析
+
+cd /example下面
+里面有个solr/connection1/core.properties
+solr/connection1/index 里面存的索引文件
+solr/connection1/logs 里面是全部的数据
+
+加上中文的分词器
+
+下载 IK Analyzer 2012FF_hf1.zip
+加压开 有一个jar包 还有一个conf文件 dic文件
+把jar包放入tomcat的lib下
+在tomcat的WEB-INF建立classes目录
+将conf文件和dic文件放入classes目录下
+vim /usr/local/solr-4.10.2/example/solr/collection1/conf/schema,xml
+
+添加如下配置
+
+<fieldType name="text_ik" class="solr.testField">
+	<analyzer type="index" isMaxWordLength="false" class="org.wltea.analyzer.lucene.IKAnalyzer">
+	<analyzer type="query" isMaxWordLength="true" class=""org.wltea.analyzer.lucene.IKAnalyzer>
+</fieldType>
+
+添加自己的分词管理
+/usr/local/solr-tomcat/bin/shutdown.sh
+
+vim /usr/local/solr-tomcat/webapps//solr/WEB-INF/classes/IKAnalyzer.cfg.xml
+
+放开一个配置，可以扩展配置
+
+cd /usr/local/solr-tomcat/webapps/solr/WEB-INF/classes/ext.dic
+然后就写中文词汇，自己写词汇就行，然后退出
+
+solr基础
+document包含多个field field包含名称，内容以及告诉solr如何处理
+内容的元数据
+field有很多类型，需要配置文件配即可，也有很多选项来描述，告诉
+solr在索引和搜索期间如何处理内容
+属性名称
+indexed  是否建立索引
+stored	 是否存储
+type 	 是索引方式，可以写中文分词器，比如type="text_ik"	
+
+1向solr服务器发送请求，然后处理返回请求，有固定格式
+2索引就是接受元数据，格式在schama中配置的，给了solr
+可以给solr四个不同的请求
+add/update 提交后才能搜索到
+commit 
+optimize 重构，重建索引，优化耗时，不要频繁更新
+delete 删除指定文档
+
+q key:value
+fq过滤
+sort sort=date asc,price desc
+配置文件 
+<uniqueKey>id</uniqueKey>
+
+自定义类型
+<fieldType name="" class="">
+
+可以上传一个java对象，将对象保存在solr服务器中
+在实体类中加注解
+
+
+testAddUser(){
+	SolrServer solrServer = new HttpSolrServer("http:192.168.1.114:8080/solr")
+	User u1= new User();
+	u1.setId()
+	....
+	this.solrServer.addBean(u1)
+	this.solrServer.addBean(u2)
+	this.solrServer.commit()
+
+}
+
+class User{
+@Field("id") 映射到solr配置文件中的key
+	id
+	....
+
+}
+
+加上配置文件，把key配置
+<field name="user_name" type="text_ik" //如何处理这个值 nultiValued="true"//表示数组>
+
+进入一条数据成功
+
+把文档传承bean
+
+User u = this.solrServer.getBinder().getBean(User.class,doc);
+
+
+solr javaapi操作
+
+testSearchMuti(){
+	ModifiableSolrParams params=new ModifiableSolrParams();
+	params.set("q","*:*")
+	params.set("start",0)
+	params.addFilterQuery("name:电脑")
+	//显示
+	params.setHighlight(true)
+	params.setHighlightField("name")
+	params.setHighlightSimplePre("<font color='red'>")
+	params.setHighlightSimplePost("</font>")
+	params.setHighlightSnippets(1) 结果片分数
+	params.setHighlightFragsize(100) 片长度
+	
+	QueryResponse response = solrServer.query(solrQuery);
+	SolrDocumentList solrList = response.getResult();
+	...
+}
+
+
+管理员命令
+生产环境时，管理员维护数据信息
+1
+
+curl http://localhost:8080/solr/update --data-binary "<delete><query>id:1</query></delete>" -H 'Content-type:text/xml;charset=utf-8'
+提交
+
+curl http://localhost:8080/solr/update --data-binary "<commit/>" -H 'Content-type:text/xml;charset=utf-8'
+
+2集群搭建
+
+和zookeeper做协调，做集群
+
+
+

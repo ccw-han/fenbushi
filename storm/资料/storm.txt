@@ -1,0 +1,746 @@
+﻿storm
+
+对比hadoop
+hadoop是什么？
+(1)Hadoop是一个开源的框架，可编写和运行分布式应用处理大规模数据，
+是专为离线和大规模数据分析而设计的，并不适合那种对几个记录随机读写的在线事务处理模式。
+Hadoop=HDFS（文件系统，数据存储技术相关）+ Mapreduce（数据处理），Hadoop的数据来源可以是任何形式，
+在处理半结构化和非结构化数据上与关系型数据库相比有更好的性能，具有更灵活的处理能力，
+不管任何数据形式最终会转化为key/value，key/value是基本数据单元。用函数式变成Mapreduce代替SQL，SQL是查询语句，
+而Mapreduce则是使用脚本和代码，而对于适用于关系型数据库，习惯SQL的Hadoop有开源工具hive代替。
+
+(2)Hadoop就是一个分布式计算的解决方案.
+
+分布式流式计算简介
+twitter开源一个分布式实时计算系统，数据实时分析，持续计算，分布式rpc
+http://storm-project.net/
+实时推荐系统就是用实时storm做的
+路况的实时计算
+股票也是实时计算
+实现一个实时计算系统
+1低延迟
+2高性能 集群
+3分布式 单机搞不定就得分布式
+4可扩展
+5容错
+6可靠性 每个消息至少能得到一次完整的处理，任务失败时负责从消息源重试消息
+7快速 zeromq底层消息处理
+8本地模式
+
+架构模式
+
+主节点 Nimbus  提交分配任务 集群监控
+zookeeper 共有数据存放，心跳信息，集群状态，nimbus分配的任务写在这里
+从节点 Supervisor 负责接收nimbus分配的任务，管理属于自己的worker进程
+从节点有多个 worker 工作 运行具体的逻辑
+Topology（拓扑结构，整个流程图叫） 应用名称  由多组下面的通过stream grouping连接的图
+组件接口 Spouts(数据源)/Bolts(java代码数据操作)
+
+
+
+
+storm环境搭建
+jar包
+storm-core-0.9.2-incubating.jar
+cloojure-1.5.1.jar
+netty-3.2.2.Final.jar
+zookeeper-3.4.5.jar
+curator-framework-2.4.0.jar
+curator-client-2.4.0.jar
+管控台用jetty-6.1.26.jar
+disruptor-2.10.1.jar
+114 115 116
+关闭防火墙，/etc/hosts三台ip可以互相通信
+jdk
+搭建zookeeper集群
+安装python 2.6.6以上
+wget https://www.python.org/ftp/python/2.6.6/Python-2.6.6.tgz
+tar xzf Python-2.6.6.tgz
+cd Python-2.6.6
+./configure --prefix=/usr/local/Python2.6.6
+make
+sudo make install
+下载解压Storm发布版本
+tar -zxvf apache-storm-0.9.2-incubating.tar.gz -C /usr/local/
+mv apache-storm-0.9.2-incubating/ apache-storm-0.9.2
+
+修改storm.yaml配置文件
+vim /etc/profile
+export STORM_HOME=/usr/local/apache-storm-0.9.2
+export PATH=.:$JAVA_HOME/bin:$STORM_HOME/bin:$PATH
+
+cd apache-storm-0.9.2/
+自己建一个data 和logs（自动生成） 文件夹
+cd apache-storm-0.9.2/conf
+vim storm.yaml
+ storm.zookeeper.servers:
+	- "192.168.1.114"
+	- "192.168.1.115"
+	- "192.168.1.116"
+ nimbus.host:"192.168.1.114" //主节点
+ storm.local.dir: "/usr/local/apache-storm-0.9.2/data"
+ ui.port: 18080   //storm ui管控台
+ supervisor.solts.ports: //从节点运行worker的工作进程115 116随机分配的端口
+	- 6700
+	- 6701
+	- 6702
+	- 6703
+
+更新环境变量 source /etc/profile
+
+启动Storm 各个后台进程
+
+
+启动zookeeper 集群 然后分别启动storm
+三台都启动
+/usr/local/zookeeper-3.4.5/bin/../conf/zoo.cfg
+zkServer.sh start
+启动Storm
+114 storm nimbus & 符合代表后台启动
+115 storm supervisor &
+115 storm supervisor &
+jps
+cd apache-storm-0.9.2/logs
+启动成功会有nimbus.log 文件
+
+
+在114 启动管控台
+
+storm ui &
+浏览器访问，ip+port
+任务给集群就是topology
+
+
+storm——spout_bolt_topology例子 helloworld
+
+
+只引入一个core-storm 一堆进来了
+spout 和 bolt 不是节点是组件，可能三个组件在一个物理节点上
+
+编写数据源类：spout 
+1继承baserichspout类
+2实现irichspout接口
+对open nextTuple declareOutputFields 重写
+2编写数据处理类：bolt
+继承basebasicbolt类
+实现irichbolt接口
+对execute declareOutputFields重写
+最后编写主函数 Topology去进行提交一个任务
+使用Topology 提供了本地模式和集群模式
+本地模式：不用集群，直接java运行，用于测试和开发，运行main函数
+集群模式：把实现的java程序打包，然后Topology进行提交 需要把应用打成jar
+使用storm命令把Topology提交到集群中去
+
+三个包 bolt spout topology
+
+bolt 
+
+printBolt.java s过来的源发给print
+class PrintBolt extends BaseBasicBolt{
+	public void execute(Tuple input ,BasicOutputCollector collector){
+		String print = input.getStringByField("print");
+		collector.emit(new Values(print));
+	
+	
+	}
+	public void declareOutputFields(outputFieldsDeclarer declarer){
+		//进行声明,上面发射的数据的name为print 值为上面的map中的发射的值，接下来的bolt取得有key
+		key为print
+		declarer.declare(new Fields("write"));
+	
+	}
+
+}
+
+
+
+
+writeBolt.java print的发给write
+class WriteBolt extends BaseBasicBolt{
+	public void execute(Tuple input ,BasicOutputCollector collector){
+		String text = input.getStringByField("write");
+		...
+	
+	
+	}
+	public void declareOutputFields(outputFieldsDeclarer declarer){
+		//不发射了，就不写了
+	}
+
+}
+
+
+
+spout 入口，数据从哪里来，数据库，网页，网络来源都可以
+
+PWSpout.java
+class PWSpout extends BaseRichSpout{
+	private staitc final long serivalVersionUID = 1L;
+	private SpoutOutputCollector collector;
+	map = new HashMap();
+	static{ 
+	//数据源
+		map.put(0,"java");
+		map.put(1,"php");
+		map.put(2,"...");
+		map.put(3,"...");
+		map.put(4,"...");
+	}
+	public void open(Map conf ,TopologyContext context,SpoutOutputCollector collector){
+		//对spout进行初始化
+		this.collector = collector;
+	}
+	//轮询,不停的
+	public void nextTuple(){
+		//随机发送一个单词
+		final Random r = new Random();
+		int num = r.nextInt(5);
+		try{
+			Thead.sleep(500);
+		}catch(InterruptedException e){
+			e.printStackTrace();
+		
+		}
+		//发射数据
+		this.collector.emit(new Values(map.get(num)));
+		
+	
+	}
+	public void declareOutputFields(outputFieldsDeclarer declarer){
+		//进行声明,上面发射的数据的name为print 值为上面的map中的发射的值，接下来的bolt取得有key
+		key为print
+		declarer.declare(new Fields("print"));
+	
+	}
+
+}
+
+
+
+
+topology
+
+PWTopology1.java
+
+main(){
+	Config cfg=new Config();
+	cfg.setNumWorkers(2);//jvm有几个
+	cfg.setDebug(true);
+	TopologyBuilder builder=new TopologyBuilder();
+	builder.setSpout("spout",new PWSpout());
+	builder.setBolt("print-bolt",new PrintBolt()).shuffleGrouping("spout");
+	builder.setBolt("write-bolt",new WriterBolt()).shuffleGrouping("print-bolt");
+	
+	//本地模式：不用集群，直接java运行，用于测试和开发，运行main函数
+	LocalCluster cluster=new LocalCluster();
+	cluster.submitTology("top1",cfg,builder.createTopology());
+	Thread.sleep(10000);
+	cluster.killTopology("top1");
+	cluster.shutdown();
+	
+	
+	//集群模式：把实现的java程序打包，然后Topology进行提交，永不停止
+	StormSubmitter.submitTology("top1",cfg,builder.createTopology());
+}
+PWTopology2.java
+PWTopology3.java
+
+集群环境
+
+先打包
+右击pom.xml项目 run as maven build
+storm01.jar
+放到linux中
+然后使用命令放入storm中
+因为设置了2个jvm 现在从节点有115 116 俩个，所以可能，115 116 都会执行这个拓扑
+printbolt 和 writebolt 可能分给115 可能116 可能平均分，不确定，随机定义的
+114 
+storm jar storm01.jar bhz.topology.PWTopology1
+cd apache-storm-0.9.2/data/
+cd nimbus/
+cd inbox/
+显示有个jar包
+kill后得重新上传
+storm jar storm01.jar bhz.topology.PWTopology1
+115 116
+JPS 有worker进程
+看log日志
+115  spout在115，有其他策略
+cd apache-storm-0.9.2/logs/
+tail -n 100 -f worker-6703.log
+116   	来个bolt在116，可以改变
+cd apache-storm-0.9.2/logs/
+tail -n 100 -f worker-6703.log
+cd temp/
+有个临时文件，bolt的临时文件
+storm list 任务命令
+
+storm grouping_worker executor task 配置详解
+
+Stream grouping流分组，数据的分发方式
+worker 工作进程 java的jvm虚拟机 一个节点可以有多个进程
+executor 线程池
+task 具体的执行任务
+configuration配置 有很多
+
+PWTopology2.java
+main(){
+	Config cfg=new Config();
+	cfg.setNumWorkers(2);//jvm有几个
+	cfg.setDebug(true);
+	TopologyBuilder builder=new TopologyBuilder();
+	2个执行器就是俩个线程池和2个任务
+	builder.setSpout("spout",new PWSpout(),2).setNumTasks(2);
+	builder.setBolt("print-bolt",new PrintBolt(),2).shuffleGrouping("spout").setNumTasks(4);
+	builder.setBolt("write-bolt",new WriterBolt(),6).shuffleGrouping("print-bolt").setNumTasks(6);
+	
+	//本地模式：不用集群，直接java运行，用于测试和开发，运行main函数
+	LocalCluster cluster=new LocalCluster();
+	cluster.submitTology("top2",cfg,builder.createTopology());
+	Thread.sleep(10000);
+	cluster.killTopology("top2");
+	cluster.shutdown();
+	
+	
+	//集群模式：把实现的java程序打包，然后Topology进行提交，永不停止
+	StormSubmitter.submitTology("top2",cfg,builder.createTopology());
+}
+
+不同的线程去运行了bolt类
+
+默认本地模式，一个节点一个jvm，开了四个线程，一个运行spout，三个运行三个bolt task
+task具体的组件
+
+一个节点，一个jvm，设置spout设置俩个并行度，那么将再开一个线程，去运行spout的task
+
+二个节点，分别一个jvm，设置spout并行度为2个线程池，集群里就是平均分配，一个节点一个线程，
+俩个节点就俩个线程
+平均分配不同的节点，一个task对应一个组件，一个线程运行多个task
+
+
+执行器=2+2+6=10 = 线程池
+任务=2+4+6=12 = 线程数
+每个jvm=12/2=6个任务，默认下，一个执行器执行一个任务。但如果指定任务数，会
+平均到执行器中
+
+
+个worker进程执行的是1个topology的子集（注：不会出现1个worker为多个topology服务）。
+1个worker进程会启动1个或多个executor线程来执行1个topology的component(spout或bolt)。因此，1个运行中的topology就是由集群中多台物理机上的多个worker进程组成的。
+
+
+executor是1个被worker进程启动的单独线程。每个executor只会运行1个topology的1个component(spout或bolt)的task（注：task可以是1个或多个，storm默认是1个component只生成1个task，
+executor线程里会在每次循环里顺序调用所有task实例）。
+
+task是最终运行spout或bolt中代码的单元（注：1个task即为spout或bolt的1个实例，executor线程在执行期间会调用该task的nextTuple或execute方法）。
+topology启动后，1个component(spout或bolt)的task数目是固定不变的，但该component使用的executor线程数可以动态调整（例如：1个executor线程可以执行该component的1个或多个task实例）。这意味着，
+对于1个component存在这样的条件：#threads<=#tasks（即：线程数小于等于task数目）。默认情况下task的数目等于executor线程数目，即1个executor线程只运行1个task。
+
+
+storm 分组模式详解
+1shuffleGrouping 随机分组 每个bolt接受数目相同
+2FieldsGrouping 按字段分组，比如按照userID分组，同样的userid会被分到
+相同的bolt
+.fieldsGrouping("print-bolt",new Fields("write"))// 按字段分组，一样的
+同一组的tuple会发送到相同的bolt中
+3All Grouping 广播发送，每一个tuple，所有的bolts都会受到
+4Global Grouping 全局分组，只给id最低的那个task
+5NOn Grouping
+6Direct Grouping 直接给那个task
+
+
+storm——worldcount例子
+
+
+
+storm保证机制
+实现irichbolt接口
+1可靠性
+不能被处理丢失是很严重的事
+使用事务保证数据不丢失
+spout
+发射成功
+重写ack方法
+public void ack (Object msgId){
+	out.println()
+]
+发送失败
+重写fail方法
+public void fail(Object msgId){
+	//重新发送，上面spout发送的参数到这里了
+	collector.emit(new Values(subjects[(Integer) msgId]),msgId);
+}
+bolt接收时一定要描记，做一个记号，才会调用方法
+继续发射的时候，
+colletcor.emit(tumple,new Values(word));tumple一定要带进来好继续往下处理
+collector.ack(tuple);
+collector.fail(tuple);
+中间任何一个bolt失败，都会回调初始的spout的方法
+一个链条是一个完整的事务，只要任何一环节失败，都会回调，数据源会重新发送，导致重复消费问题
+数据源发送错误怎么办，重新发就行了
+重复消费怎么办？
+1如果是数据库的话，用id对比，幂等性
+IBatchSpout
+第一次发送了类似于id为1 版本号，然后分解运算，分别存了 1 2 3在数据库，
+如果3存失败， 1 2 存成功，并且版本号也存了，那么spout会又重新发，继续版本号为1
+后台数据库做了幂等性，做了对比，已经存了就不处理了，没处理的就去处理
+
+
+upltree，spout发送一个消息给俩个bolt处理，最后一个bolt会有异或运算
+中间每个节点都会记录id，如果中间失败，都会从头再来，
+流转进入会记录id，出来会记录id，俩个一样的会约掉了，内存就减少了
+ 
+
+
+storm——drpc讲解 分布式的远程方法调用
+storm引入drpc主要利用storm实时计算能力来并行化cpu密集型的计算任务
+drpc以storm topology以函数流作为输入，返回值作为输出流
+本来应该给drpc单独打个包，但是太重要了，所以捆绑storm
+通过DRPC Server来实现
+1接收一个rpc请求
+2发送请求到storm topology
+3从storm topology接收结果
+4结果返回给客户端
+如何配置？
+storm提供了一个LinearDRPCTopologyBuilder的topology builder，它把
+实现DRPC几乎所有的步骤简化了
+步骤 新建maven项目
+1修改配置文件
+vim /usr/local/apache-storm-0.9.2/conf/storm.yaml
+drpc.servers:
+ -"192.168.1.114" 主从都配置
+ 2启动storm的drpc 命令 storm drpc &
+ 3把相应的topology代码上传到storm服务器上
+ storm jar storm04.jar bhz.drpc1.BasicDRPCTopology exc //exc随便什么名字，相当于args【】
+ 4本地调用远程的topology即可
+
+不用写spout，来源是drpc过来的数据
+bolt以前一样写
+main(String[] args){
+	//创建drpc实例
+	LinearDRPCTopologyBuilder builder= new LinearDRPCTopologyBuilder("exclamation");
+	//添加bolt
+	builder.addBolt(new EXclaimBolt(),3);//并行度是3
+	Config conf = new Config();
+	if(args == null || args.length == 0){
+	//本地模式
+		LocalDRPC drpc = new LocalDRPC();
+		LocalCluster cluster = new LocalCluster();
+		cluster.submitTopology("drpc-demo",conf,builder.createLocalTopology(drpc))
+		for(String word: new String[]{"hello","goodbye"}){
+			System.out.print(drpc.execute("exclamation",word))
+		}
+	}else{
+	//远程
+	conf.setNumWorkers(3);//jvm
+	stormSubmitter.submitTology(args[0],conf,builder.createRemoteTopology());
+	}
+	
+	4本地调用远程的topology即可？
+	主要使用storm的并行计算能力
+	class DrpcExclam{
+		main(){
+			DRPCClient client = new DRPCClient("192.168.1.114",3772);
+			for(String word : new String[]{"hello","goodbye"}){
+			//use queue，这边的数据是来源的，然后给远程storm去调用，kafka做数据源
+				System.out.print(client.execute("exclamation",word));
+			
+			}
+		}
+	
+	
+	}
+
+
+}
+drpc-2 到此
+转发人数可能会有人重复，得去重
+第一：获取当前发帖子的人
+第二：当前任的粉丝
+第三去重
+第四统计
+第五使用drpc调用topology
+
+
+
+storm_trident
+trident在storm基础上，一个以实时计算为目标的高度抽象。进行了封装。
+在提供大吞吐量的同时还提供了低延时分布式查询和有状态流式处理的能力。
+提供了joins，aggregations，grouping，functions以及filters能力
+提供了基于数据库或者其他存储前提下应付有状态的递增式处理
+还提供了一致性，有且仅有一次等语义。
+stream是trident的核心数据模型。一个stream被分为很多分区，多流操作是在每个分区上并行
+执行的。
+每一个分区操作有：function。filter partitionAggregation
+stateQuery partitionPersist project 等
+function类似于bolt中的execute方法
+1 main 还是一样和storm一样
+static main(){
+	...
+	cluster.submitTopology("a",conf,buildTopology())
+	...
+	
+}
+static buildTopology(){
+	TridentTopology tipology = new TridentTopology();
+	//数据源,封装好的数据源
+	FixedBatchSpout spout = new FixedBatchSpout(new Fields("a","b","c","d"),//域字段为abcd
+	4,//批处理大小
+	//数据源内容
+	new Values(1,4,7,10),
+	new Values(1,4,7,10),
+	new Values(1,4,7,10),
+	new Values(1,4,7,10),
+	);
+	//指定是否循环发送，就是发完就不发了，true就是一直发
+	spout.setCycle(false);
+	//指定输入源spout
+	Stream inputStream = topology.newStream("spout",spout);
+	/**
+	 要实现spout-bolt的模式，这里是用each做的
+	 each参数
+	 1 数据源参数名称
+	 2执行的function名称也就是bolt对象。new SunFunction()
+	 3指定function对象里的输出参数名称：sum
+	
+	*/
+	inputStream
+	.each(new Fields("a","b","c","d"),
+	new SumFunction(),new Fields("sum"))
+	.each(new Fields("a","b","c","d","sum"),
+	new Result(),new Fields());
+	//利用这种方式，返回一个stormtopology对象，进行提交
+	return topology.build();
+	
+
+}
+
+function
+
+class SunFunction extends BaseFunction{
+	execute(TridentTuple tuple,TridentCollector collector){
+		int number1 = tuple,getInteger(0);
+		int number2 = tuple,getInteger(1);
+		//出去的流数据是不变的，又new的一个新的，那么就多了一个
+		collector.emit(new Values(sum))
+	}
+
+
+}
+
+filter
+
+extends BaseFilter{
+	isKeep(tuple){
+		return true;需要的
+		false 为过滤掉的
+	}
+
+}
+
+projections
+投影，只要第一个域
+mystream。project(new Field("x"))
+
+分组策略
+1随机分组
+mystream.shuffle().each.......
+2partitionBy("user") 就是key分组 key的域一样的数据都到一个地方去了
+mystream.partitionBy(new Fields("user")).each.....
+3global() w唯一分组，只给一个
+mystream.global().each...
+4广播分组，都接收一样
+mystream.broadcast().each...
+5batch分组   一批数据都给一个操作者
+mystream.batchGlobal().each....
+一批有一个id，但处理的时候还是一个个进来的处理的，id是一样的，重发还是一批重发
+6partition aggregate
+mystream.partitionAggregate(new Fields("x"),new Count(),new Fields("count"))
+先按x分组，然后统计，然后输出统计值
+也可以分组然后each然后再分组
+mystream.shuffle().each(new Fields("subjects"),new SplitFunction(),new Fields("sub"))
+.groupBy(new Fields("sub"))
+.aggregate(new Count(),new Fields("count"))
+.each(new Fields("sub","count"),new ResultFunction(),new Fields())
+.parallelistHint(1)
+
+
+
+storm_kafka安装与使用  kafka集群，依赖于zookeeper去管理，向zookeepr中注册了一堆东西
+
+kafka海量数据，没有消息重试，只是吞吐量，和大数据框架集成挺好
+topic包含多个partion
+consumer group 集群消费
+1下载 http://kafka.apache.org/downloads.html
+2解压
+tar zxvf kafka_2.10-0.9.0.1.tgz -C /usr/local/
+3 改名
+mv kafka_2.10-0.9.0.1/ kafka
+4vim /usr/local/kafka/conf/server.properties
+broker.id=0
+port=9092
+host.name=192.168.1.114
+advertised.host.name=192.168.1.114
+log.dirs=/usr/local/kafka/kafka-logs
+num.partions=2
+zookeeper.connect=192.168.1.114:2181,192.168.1.115:2181,192.168.1.116:2181
+建立日志文件
+mkdir /usr/local/kafka/kafka-logs
+启动kafaa 和 zookeeper
+/usr/local/kafka/bin/kafka-server-start.sh
+/usr/local/kafka/conf/server.properties & 
+可以去zookeeper节点上看一下
+
+kafka必须自己建立topic
+cd /usr/local/kafka/bin
+1创建topic命令
+kafka-create-topic.sh --replica 1 --partion 1 --topic test //一个分区下建立topic
+2查看topic列表
+kafka-topics.sh --zookeeper 192.168.1.114:2181 --list
+3kafka命令发送数据
+kafka-console.producer.sh --broker-list 192.168.1.114 --topic test
+class Producer{
+	main(){
+		Properties properties = new Properties();
+		properties.put("zookeeper.connect","192.168.1.114:2181,192.168.1.115:2181,192.168.1.116:2181")
+		properties.put("serializer.class",StringEncoder.class.getName())
+		properties.put("metadata.broker.list","192.168.1.114:9092")//声明broker
+		properties.put("request.required.acks","1")
+		Producer producer = new Producer<Integer,String>(new ProducerConfig(properties));
+		for(int i-0;i<10;i++){
+			producer.send(new KeyedMessage<Integer,String>("test","hello kafka"+i))
+		
+		
+		}
+		producer.close()
+
+
+
+	}
+
+}
+
+
+
+
+4接收数据
+kafka-console-consumer.sh --zookeeper 192.168.1.114 --topic test --from-beginning
+ 
+ 
+ kafka管控台安装
+ 1下载 kafka-manager-1.0-SNAPSHOT.zip
+ unzip kafka-manager-1.0-SNAPSHOT.zip -d /usr/local/
+ mv kafka-manager-1.0-SNAPSHOT/kafka-manager-1.0
+ vim /usr/local//kafka-manager-1.0/conf/application.conf
+ kafka-manager.zkhosts="192.168.1.114:2181,192.168.1.115:2181,192.168.1.116:2181"
+启动Storm
+nohup /usr/local//kafka-manager-1.0/bin/kafka-manager -Dconfig.file=/usr/local/kafka-manager-1.0/conf/application.conf>/dev/null 2>&1 &
+
+9000端口
+
+storm——kafkaspout使用
+
+kafka的包
+org.apache.kafka kafka_2.10
+org.apache.logging.log4j log4j-slf4j-impl
+org.apache.logging.log4j log4j-1.2-api
+org.slf4j log4j-over-sif4j
+
+难点是数据源
+
+net.wurstmeister.storm storm-kafka-0.8-plus
+
+producer main函数 数据发到kafka上
+KafkaTopology{
+	main(){
+	//kafka的集群zookeeper管理的
+		ZkHosts zkhosts = new ZkHosts('192.168.1.114:2181')
+		//1 为集群 2为主题3为zookeeper root 4为groupid
+		SpoutConfig kafkaConfig=new SpoutConfig(zkhosts,"words_topic","","id7")
+		kafkaConfig.scheme = new SchemeAsMultiScheme(new StringScheme());
+		kafkaConfig.forceFormStart = true;
+		TopologyBuilder builder = new TopologyBuilder();
+		builder.setSpout("kafkaSpout",new KafkaSpout(kafkaConfig),1);
+		builder.setBolt();
+		.....
+		后面是一样的
+		
+	
+		
+	}
+
+
+
+}
+
+使用storm
+1 一种是kafka作为数据源
+2 一种是网络数据到queue然后queue去take 然后调用drpc使用storm，为何要
+queue呢，使用缓冲，不然大量数据扛不住
+多个netty服务器 ，每一个服务器接收数据，缓存到一个queue中，或者直接扔给一个线程池然后调用同一个storm集群
+
+storm结合redis使用 都是结合内存的数据库
+
+数据怎么出去？
+数据基本不保留，因为大数据多多少少会丢失数据，可以直接持久化到db中。频繁磁盘io性能不行
+
+1安装启动redis
+storm中
+
+main(){
+	...
+	builder.setSpout("spout",new SampleSpout(),2)
+	builder.setBolt("bolt",new StormRedisBolt("redisIp",port),2).shuffleGrouping("spout")
+	....
+
+}
+StormRedisBolt{
+	
+	void execute(Tuple input,BasicOutputCollector collector){
+		Map record = 
+		...
+		接收数据放入record中
+		redisOperations.insert(record,UUID.randomUUID().toString())
+	
+	
+	}
+
+	void prepare (Map stormConf,TopologyContext context){
+		redisOperations = new RedisOperations(this.redisIp,this,port);
+	
+	}
+
+RedisOperations{
+	RedisOperations(String ip,int port){
+		Jedis jedis=new Jedis(ip,port)
+	}
+	insert(Map record,String id){
+		jedis.set(id ,new ObjectMapper().writeValueAsString(record))
+	
+	}
+
+}
+
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

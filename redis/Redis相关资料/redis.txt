@@ -1,0 +1,293 @@
+1.1nosql
+1key-value	redis
+2列存储
+3.文档数据库存json
+4图形数据库
+2特点
+1模型简单
+2更强的it系统
+3对数据库性能高
+4不需要数据一致性
+5映射复杂值得环境
+3redis
+key-value存储 ，分布式的，高并发读写，海量数据存储和访问，数据可扩展和高可用。是内存型的，关系型是硬盘型的。
+键包含：string，哈希，链表list，set集合，zset有序集合 支持push和pop add、remove以及取交集和并集
+可以周期性的写入磁盘和修改操作追加到文件记，rdb每隔5s写磁盘，aof类似于执行save update记录到日志，掉电从aof查出来。常用aof
+4可扩展
+主节点支持读和写，从节点支持读，主从内容一致。又来了1g，水平扩展和垂直扩展。
+水平扩展就是往集群中加一台。垂直扩展就是在机器上加内存
+5高可用
+要求几个主节点，一个挂了，另外工作
+6数据可靠性
+数据不丢失，内存断电会丢失
+7redis面对互联网三种形式
+1主从 写用主写，读用从读，主挂了不行
+2哨兵，有一个人监控其他兄弟，有四台机器，哨兵节点，监控三台机器状态。主挂了会投票从升级为主，哨兵作用就是选举，主修复好会自动成为从
+不太好原因：不太好做分布式的数据库
+3集群模式：多主多从，数据可以分布，可以把1g数据分给三台机器。每台机器存储不同的数据。
+memeorycache是并行的,多个实例，但是管理程度也大了，一个老师管多个学生，redis是串行处理，一个老师管一个学生
+群狼战猛虎
+多线程写的时候，redis写比较慢，读还是很快的，慢怎么办，用集群，再加一个节点，ssdb技术之间的结合
+keepalived + ngnix+lvs 前端入口处，ngix又挂了几个ngix，
+到java代码高并发，用多线程，多个容器，存对象里其实也就是缓存里
+后端就是数据库瓶颈。在数据库层面也要考虑集群，mysql分库，主从集群，或者就是定时job，或者缓存
+给关系型数据库降压，关系型存700m，300m缓存里，去访问缓存。
+redis环境安装
+1安装gcc，下载好的放入文件夹下
+2解压tar命令
+3到解压好的目录下，进行编译 make命令
+4到src下 make install
+5建立俩个文件夹，存放redis命令和配置文件
+etc和bin文件夹
+6redis.conf 放入redis下
+7把mkreleasehdr.sh redis-benchmark redis-check-aof  redis-check-dump redis-cli redis-server 
+放入bin下
+8启动
+./redis-server ../etc/redis.conf 启动脚本，组合，占用6379端口
+前台启动就运行不了命令，后台启动可以运行命令
+后台启动修改conf配置文件daemonize 改为yes 为后台启动
+set key value
+get key
+停用服务器 shutdown
+数据类型
+1 string
+key 和 value都是string
+del name
+setnx 不存在进行设置，存在不需要设置返回0
+setex color 10 red 设置有效期为10s，后返回nll
+setrange email 10 ww 替换字符串 第10位替换
+一次性设置多个值
+mset mget方法
+mset key1 value1 k2 value2
+incr decr 对某个值进行递增和递减
+incrby decrby 步长递增
+incr age 自增了1返回值加了1
+incrby age 3
+append key 12345 追加
+strlen key 长度
+2hash类型很常用一个string类型的集合，适合存储对象
+hset muhash field1 hello  myhash是集合名 hget myhash field1
+hmset 多个键值对设置
+hsetnx 和 setnx一样
+hincrby 和hdecrby 集合递增递减
+hexists 是否存在key
+hlen user key的数量
+hdel 删除指定的hash的field
+hkeys 返回hash里所有的字段
+hvals 所有的值
+hgetall 所有的键值对
+3 list类型类似于队列
+链表集合，push和pop获取元素，双端的链表，对头部和尾部都可以，既可以作为栈和作为队列
+从头部加入元素 先进后出ipush list1 “hello” 
+irange list1 0 -1 从头取到末尾
+rpush 从尾部加入元素，队列，先进先出
+rpush list2 "beijing"
+flushdb 清空
+linsert list3 before "one" "three"在one元素之前插入three
+lset list4 0 'b' 指定下标元素替换
+lrem list4 2 ‘b’ 删除元素2次，list允许重复
+ltrim list6 0 1 保留指定范围内的数据
+lpop 从list头部删除元素并返回删除元素
+rpop从list尾部删除元素
+lindex key的index位置的元素
+llen返回元素的个数
+4set无序 不重复 ZSET 有序的集合
+sadd 向key的set中添加元素 sadd set1 aaa sadd set1 bbb
+smembers查看set集合的元素smembers set1
+srem方法删除set集合元素 srem set1 aaa
+spop 随机返回删除的key
+sdiff 返回俩个集合中不同元素的集合，哪个集合在前面就以谁为标准
+sdiffstore 将返回的不同元素储存到另外一个集合里
+sdiffstore set3 set1 set2 set1 和set2的不同元素以set1为准，存储到set3集合里
+sinter返回集合的交集sinter set1 set2
+sunion 取并集
+sunionstore 取得并集存储到set3中
+smove 从一个set集合移动到另外一个集合里
+smove set1 set2 a相当于将set1中的a剪切复制到set2中
+scard 查看集合里元素个数
+sismember 判断元素是否为集合中的元素
+sismember set2 a 查看a是否为set2中的元素1是，0不是
+srandmember 随机返回一个元素
+srandmember set2
+5zset有序集合
+zadd 添加一个元素
+zadd zset1 5 five 往第五个位置插入five
+zrange zset1 0 -1 withscores 显示元素的时候把索引也体现出来
+可以做搜索排行做排行榜rank
+zrem zset1 one 删除one
+zincrby 
+zrangebyscore 找到指定区间范围内数据进行返回
+zremrangebyrank 删除1到1 只删除索引1
+zremrangebyscore 删除指定序号
+zrank 返回排序索引从小到大排序（升序之后再找索引）
+zrank返回的是索引 zrank zset1 four
+zrevrank 从大到小后找到索引降序之后找索引
+zrangebyscore zset1 2 3 withscores 指定区间范围进行数据返回
+zcount zset1 1 4 给定score在给定区间的数量
+zremrangebyrank zset from to 删除索引
+zremrangebyscote zset from to 删除指定序号
+高级命令
+keys * 所有的键
+exists key 是否存在key
+expire 设置key的过期时间，定时器刷新缓存 ttl查看剩余时间
+persist取消过期时间
+select 1选择数据库 一共16分数据库默认进入0数据库数据安全，做数据备份三块数据放不同的服务器上
+存不同类型的数据库
+move name 2 移动到不同的数据库
+randomkey 随机返回数据库的一个key
+rename name name1 对key改名
+echo打印命令
+dbsize查看数据库的key数量
+config get * 返回所有配置项
+flushdb清空当前数据库
+redis安全性
+一个外部用户可以在一秒内15w次密码尝试，要防止暴力破解
+vi redis.conf 
+requirepass ****
+重启服务
+auth redis
+redis主从复制
+1master可以多个slave
+2多个slave可以同一个master也可以连接其他slave相当于树
+3主从复制不会阻塞master在同步数据时 master可以继续处理客户端请求
+4提供系统的伸缩性
+过程
+1slave与master建立连接，发送sync同步命令
+2master会开启一个后台进程，会将数据库快照保存到文件中，同时
+master主进程会开始收集新的写命令写缓存
+3后台完成保存后，就将文件发送给slave
+4slave将此文件保存到硬盘上
+主从复制配置：
+clone服务器之后修改slave的ip地址
+修改配置文件 主不动从都要配
+第一步：slaveof 192.168.1.121 6379
+第二步：masterauth master-password
+使用主info查看角色即可知道是主服务还是从服务
+配好之后自动去备份，自动的负载均衡，内部是new实例连接，这个不是我们做的
+主从装一样的软件，可以跨机器复制
+
+redis简单事务
+事务很简单，使用multi方法打开事务，然后进行设置，exec执行，然后存储到redis，使用multi方法打开事务，然后进行设置，exec执行，然后存储到redis，使discard
+取消事务。
+依次操作，如果其中一个报错，这边不是，也不会回滚
+redis持久化
+1默认，是快照，将快照写入二进制中，默然为dump.rdb可以通过设置自动做快照持久化的方式，可以设置
+n秒内如果超过m个key修改则自动做快照。
+save 900 1 900秒内超过1个key被修改则发起快照保存。
+对数据没啥要求，允许数据丢失可以用这个。
+2appendonlyfile 为aof类似于oracle日志。
+aof不是立即写到硬盘上，可以设置文件修改强制写到硬盘中。
+appendonly yes
+appendfsbnc always   立即写
+appendfsync everysec   每秒写入磁盘一次。其实就是写入aof中。
+appendfsync no 性能好，持久化没保证
+有集群了，不用考虑效率问题
+redis的发布与订阅
+subscribe进行订阅监听
+publish发布消息广播
+同一个终端开三个窗口，另外俩个subscribe cctv   cctv是频道
+其中一个publish cctv
+publish cctv hellowaorld
+javaapi
+jedis-2.7.2.jar
+Jedis jedis-2
+ShardedJedis shard   分片  取余算法可以快速的定位数据
+ShardedJedisPool pool 分片池 
+连接一台redis服务器 使用jedis
+连接主从啊，哨兵啊 可以用shard 
+连接池，十个jedis连接,用完在放回去
+new Jedis(ip,port);
+List list=j.mget("name","age");
+map.put()
+j.hmset("user",map);
+
+User 对象数据很大，查询很频繁，需要把User中的数据放入缓存中去。
+new 10个User对象放入map   FastJsonConvert.convertObjectToJson(obj)
+j.hmset("SYS_user_table",map);
+多种集合配合使用 hash类型和set类型同时使用
+jedis.sadd();
+j.sadd('SYS_USER_SEL_SEX_m',ulid);
+j.sadd('SYS_USER_SEL_AGE_25',u2id);
+j.sadd('SYS_USER_SEL_SEX_m',u2id);
+...
+list ids=j.smembers("SYS_USER_SEL_AGE_25");//符合给定业务的数据ids
+for(ids){
+	
+}
+List ret=j.hmget("SYS_user_table",ids.toArray());
+
+
+
+redis集群
+在3.0以前是用哨兵sentinel工具进行监控，3.0以后支持集群配置。
+闪断的时候，哨兵切换需要时间，所以比较蛋疼，失败
+java层做好try catch 防止异常操作，作为事务处理
+keepalived 相当于虚拟出来一个vip下面挂载几个nginx，作为负载均衡
+集群搭建：至少需要三个master，六台机器，拷贝三份。
+一台模拟六台机器，数据是分布式
+第一步：创建一个文件夹redis-cluster
+然后在下面做6个文件夹：相当于六台机器
+7001-7006   
+第二步：配置文件所有都要，然后都要修改
+1 daemonize yes 后台启动
+2port 700* (分别设置)
+3bind 192.168.1.171（绑定当前机器的ip）
+4dir /usr/local/redis-cluster/700*/指定数据存放位置，每一个节点的数据
+5cluster-enabled yes 开启集群
+6cluster-config-file nodes700*.conf(700*最好和port对应上) 每一个节点对应一个文件，每一个节点都应该互相指知道另外的节点。是一个整体cluster环境
+7cluster-node-timeout 5000
+8appendonly yes 开启aof
+第三步：拷贝
+第四步：redis集群需要使用ruby命令，安装ruby,集群是用ruby写的
+1yum install ruby
+2 yum install rubygems
+3gem install redis 安装redis和ruby的接口
+第五步：分别启动6个实例,启动配置文件命令
+第六步 执行redis-trib.rb
+./redis-trib.rb create --replicas 1 192.168.171:7001 ...... 7006 其中一台运行这个命令
+1是比例，主节点和从节点的比值，前面三个就是主节点后面是从节点，顺序一一对应，从节点没有槽，不支持写操作
+./redis-cli -c -h -p
+./redis-cli -c -h 192.168.1.121 -p 7002 集群连接其中一个节点
+cluster nodes 查看所有节点
+连接的是7001，但是不一定是存到7001上，可能在其他上，是集群上的， 但是在7002设置数据，相应的从节点也有数据。
+连接任意一台都可以。操作的都是整个cluster
+虽然上面设置在7002上，但是在7001上取数据也能取出来。操作任意一台都是任意的。
+入口任意一个都是入口，只是端口号不一样，java端配置文件都配了任意ip，随便进，不用我们控制
+https://www.cnblogs.com/java-spring/p/9488388.html spring集群配置
+java操作集群
+1new6个HostAndPort(ip,port),放入集合
+2cfg= new JedisPoolConfig()
+3cfg.setMaxTotal(100);
+cfg.setMaxIdle(20);
+cfg.setMaxWaitMillis(-1);
+cfg.setTestOnBorrow(true);
+4jc=new JedisCluster(set,6000,100,cfg);
+5jc.get("key")
+
+
+
+
+
+
+
+8. 集群验证  https://www.cnblogs.com/wuxl360/p/5920330.html
+
+在第一台机器上连接集群的7002端口的节点，在另外一台连接7005节点，连接方式为 redis-cli -h 192.168.31.245 -c -p 7002  ,加参数 -C 可连接到集群，因为上面 redis.conf 将 bind 改为了ip地址，所以 -h 参数不可以省略。
+
+在7005节点执行命令  set hello world ，执行结果如下：
+
+ 
+
+然后在另外一台7002端口，查看 key 为 hello 的内容， get hello  ，执行结果如下：
+
+
+简单说一下原理
+
+redis cluster在设计的时候，就考虑到了去中心化，去中间件，也就是说，集群中的每个节点都是平等的关系，都是对等的，每个节点都保存各自的数据和整个集群的状态。每个节点都和其他所有节点连接，而且这些连接保持活跃，这样就保证了我们只需要连接集群中的任意一个节点，就可以获取到其他节点的数据。
+
+Redis 集群没有并使用传统的一致性哈希来分配数据，而是采用另外一种叫做哈希槽 (hash slot)的方式来分配的。redis cluster 默认分配了 16384 个slot，当我们set一个key 时，会用CRC16算法来取模得到所属的slot，然后将这个key 分到哈希槽区间的节点上，具体算法就是：CRC16(key) % 16384。所以我们在测试的时候看到set 和 get 的时候，直接跳转到了7000端口的节点。
+
+Redis 集群会把数据存在一个 master 节点，然后在这个 master 和其对应的salve 之间进行数据同步。当读取数据时，也根据一致性哈希算法到对应的 master 节点获取数据。只有当一个master 挂掉之后，才会启动一个对应的 salve 节点，充当 master 。
+
+需要注意的是：必须要3个或以上的主节点，否则在创建集群时会失败，并且当存活的主节点数小于总节点数的一半时，整个集群就无法提供服务了。
+
