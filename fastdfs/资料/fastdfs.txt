@@ -1,0 +1,376 @@
+﻿1fastdfs 轻量级分布式文件系统
+文件存储。文件访问，大容量和负载均衡。适合视频网站
+存放二进制的数据库
+ngnix+fastdfs    不重要的文件就放这里，很关键的数据还得放数据库，fastdfs也存一份
+1单节点安装   俩个节点都同时安装173 174同时安装
+1Tracker通过这个上传api  Storage 存到这里 http访问，集成ngnix模块
+Tracker+Ngnix --------Storage节点
+1下载软件
+2安装gcc yum install make cmake gcc gcc-c++
+3安装libfastcommon	 
+1上传libfastcommon-master.zip 
+2解压 unzip libfastcommon-master.zip -d/usr/local/fast/
+3进入主目录
+4编译安装
+./make.sh
+./make.sh install 默认安装到了/usr/lib64
+ 5进行软件创建
+ fastdfs主程序设置的目录为/usr/local/lib/
+ 所以我们需要创建/usr/lib64下的一些核心执行程序的软连接文件
+ mkdir /usr/local/lib/
+ ln -s /usr/lib64/libfastcommon.so /usr/lib/libfastcommon.so
+ ln -s /usr/lib64/libfdfsclient.so /usr/local/lib/libfdfsclient.so
+ ln -s /usr/lib64/libfdfsclient.so /usr/lib/libfdfsclient.so
+
+4安装FastDFS
+1cd /usr/local/software 
+2解压 tar -zxvf FastDFS_v5.05.tar.gz -C /usr/local/fast/
+3安装编译
+cd /usr/local/fast/FastDFS
+编译./make.sh
+安装 ./make.sh install
+
+4采用默认安装方式脚本文件说明
+1服务脚本在
+/etc/init.d/fdfs_storaged
+/etc/init.d/fdfs_trackerd
+2配置文件在
+/etc/fdfs/client.conf.sample
+/etc/fdfs/storage.conf.sample
+/etc/fdfs/tracker.conf.sample
+Fdfs_* 一些执行脚本
+5因为FastDFS脚本服务设置的bin目录为 /usr/local/bin 下
+实际安装在了/usr/bin/
+所以需要修改配置文件中的路径，需要修改俩个配置文件
+vim /etc/init.d/fdfs_storaged
+%s+/usr/local/bin+/usr/bin
+vim /etc/init.d/fdfs_trackerd
+%s+/usr/local/bin+/usr/bin   全局替换命令
+
+4配置跟踪器
+cd /etc/fdfs/ （173节点） 
+修改traker.conf.sample文件，copy一份traker.conf
+2vim traker.conf  看文档
+3最后我们一定要创建之前定义好的目录
+4关闭防火墙、
+vim /etc/sysconfig/iptables
+添加 -A INPUT -m state --state NEW -m tcp -p tcp --dport 22122 -j ACCEPT
+重启 ： service iptables restart
+5启动跟踪器
+/etc/init.d/fdfs_trackerd start
+6可以设置开机启动跟踪器
+vim /etc/rc.d/rc.local/
+加入配置/etc/init.d/fdfs_trackerd start
+
+5配置存储器 在174节点配置
+cd /etc/fdfs/ （174节点） 
+修改storage.conf.sample文件，copy一份storage.conf
+2vim storage.conf  看文档
+3最后我们一定要创建之前定义好的目录
+4打开防火墙、
+vim /etc/sysconfig/iptables
+添加 -A INPUT -m state --state NEW -m tcp -p tcp --dport 23000 -j ACCEPT
+重启 ： service iptables restart
+5启动跟踪器
+/etc/init.d/fdfs_storaged start
+6可以设置开机启动跟踪器
+vim /etc/rc.d/rc.local/
+加入配置/etc/init.d/fdfs_storaged start
+
+6搭建完成，测试
+1上传一份文件在tracker中上传 173节点
+copy一份client.conf文件
+cd /etc/fdfs/
+cp client.conf.sample client.conf
+2 编辑client.conf
+vim /etc/fdfs/client.conf
+修改 base_path=/fastdfs/tracker
+tracker_server=192.168.1.173:22122
+3找到命令的脚本位置，进行文件的上传.client端的命令
+cd /usr/bin/
+fdfs_ipload_file
+4174节点的data/00下
+/usr/bin/fdfs_upload_file /etc/fdfs/client.conf /usr/local/software/FastDFS_v5.05.tar.gz
+返回group1/M00/00/00的ID，其实就是到文件存储器的哪一个组的哪一个目录位置，到174的
+/fastdfs/storage/data/00/00有了文件
+
+7跟踪器和存储器安装ngnix   俩台机器都要按照ngnix
+首先存储节点配置174
+1到cd /usr/local/software
+2解压 fastdfs-ngnix-module
+3cd fastdfs-ngnix-module/src
+4编辑配置文件config
+第四行 /usr/include 去掉local
+5FastDFS 与ngnix进行集成
+cd /usr/local/
+删除 rm -rf ngnix
+cd ngnix-1.6.2/
+./configure --add-module=/usr/local/fast/fastdfs-ngnix-module/src/
+重新编译 make && make install
+6复制fastdfs-ngnix-module 中的配置文件mod_fastdfs.conf到 /etc/fafs 中的配置文件到
+7修改 mod_fastdfs.conf
+connect_timeout=10
+tracker_server=192.168.1.173:22122
+url_have_group_name=true
+store_path0=/fastdfs/storage
+8复制FastDFS里的2个文件
+cd /usr/local/fast/FastDFS/conf  中的http.conf  mime.types
+复制到/etc/fdfs/
+9建立一个软连接
+ln -s /fastdfs/storage/data/ /fastdfs/storage/data/M00
+10修改ngnix的配置文件
+vim ngnix.conf
+listen 8888     之前配置的storage的端口叫8888
+server_name localhost
+location ~/group([0-9])/M00{  那个软连接
+
+#alias /fastdfs/storage/data ;   
+ngx_fastdfs_module;
+}
+11检查防火墙，然后启动nginx服务
+启动服务 /usr/local/nginx/sbin/nginx
+12使用上面的上传文件命令上传一个文件
+13使用浏览器访问
+http://192.168.1.174:8888/group1/M00/00/00/文件 这个就是文件地址，src图片直接显示
+
+8启动和关闭服务顺序，跟踪器，存储器，ngnix
+
+fastdfs的集群搭建
+1原理
+多个client端  ----tracker cluster  做协调，先请求这个，记录的一些信息，然后返回一台可用的storage节点给client
+										然后，client发起请求给storage，返回成功的id给client端
+|                     |
+|					  |
+|					  
+storage cluster
+group1   group2  group3		分布式。三个group存储不同
+|
+|
+|
+物理节点1	内部存储是一样的，主从，实现高可用
+物理节点2
+物理节点3
+用户-tracker+ngnix负载均衡-----group1，group2,group3
+虚拟统一入口--ngnix集群多层负载均衡--tracker+ngnix1,tracker+ngnix2--group1,group2--storage+ngnix缓存节点1，storage+ngnix缓存节点2、、、、
+173 --178 6个节点
+tracker-group1 tracker-group2			173 174
+storage-group1-1 storage-group2-1		175 176
+storage-group1-2 storage-group2-2		177 178
+1 6台机器都要安装相关软件   和单节点差不多，配置文件要改集群
+1安装gcc
+2安装libfastcommon
+3安装fastdfs
+4
+2 俩台节点配置跟踪器（173,174）都要配
+1cd /etc/fdfs/
+2编辑跟踪器文件
+1base_path=/fastdfs/tracker  自己的路径，存放数据的地方
+2创立这个文件夹
+mkdir -p /fastdfs/tracker
+3启动跟踪器 全部启动
+/etc/init.d/fdfs_trackerd start
+1轮询 第一次是group1 然后2 然后1 store_lookup=0 为轮询
+2可以指定给group1 或者2
+3load balance 哪个节点空闲空间最大给谁
+第三部分 四台机器配置存储节点（75,76,77,78）
+1cd /etc/fafs
+cp storage.cong.sample storage.conf
+2编辑配置文件
+75,76位group1 77,78为group2
+disabled=false 启用配置文件
+group_name=group1					75,76这边相同
+port=23000 storage 端口号，同一个组的storage端口号必须相同
+base_path=/fastdfs/storage     日志记录
+store_path_count=1   存储路径个数，和store_path个数匹配
+store_path0=/fastdfs/storage  存储路径
+tracker_server=192.168.1.173:22122
+tracker_server=192.168.1.174:22122	过个tracker直接添加多条配置
+Http.server_port=8888
+3建立存储目录
+mkdir -p /fastdfs/storage
+4启动storage
+/etc/init.d/fdfs_storaged start
+日志命令 tail -f /fastdfs/storage/logs/storaged.log
+启动2个跟踪器，启动group1的俩个存储器，俩个存储器互相知道，也知道跟踪器节点的leader是哪个。
+随机一个主服务是74跟踪器，74挂了就是73为主。73 和74 是主从
+7当我们所有的tracker和storage节点都启动后，可以在任意一个存储节点上看集群信息
+/usr/bin/fafs_monitor /etc/fdfs/storage.conf
+显示了tracker的一个主节点，和对应有多少个组
+主从不会随便切，一个预备用的，挂了才会用
+8测试文件上传，上传到集群上
+1改cilent.conf
+base_path=/fdfs/tracker
+tracker_server=192.168.1.173:22122
+tracker_server=192.168.1.174:22122
+3cd /fastdfs/storage/data/00/00 0个文件256个槽，定位到某个槽
+4上传命令 /usr/bin/fdfs_upload_file  轮询到某一个group
+/usr/bin/fdfs_upload_file 
+/usr/bin/fdfs_upload_file /etc/fdfs/client.conf /usr/local/software/aa.doc
+返回哪个group   75,76是高可用
+第五部分，配置nginx首先4个存储节点配置nginx
+14个节点加fastdfs-nginx-module_v1.16.tar.gz(集成模块)
+cd /usr/local/software
+解压 tar -zxvf fastdfs-ngnix-module.v1.16.tar.gz -C /usr/local/fast/
+2安装前对路径修改
+cd fastdfs-ngnix-module/src/
+vim /usr/local/fast/fastdfs-ngnix-module/src/configure
+4行local去掉
+3四个存储节点安装nginx的依赖包和安装nginx 并添加fastdfs 和nginx整合模块
+yum install pcre
+yum install pcre-devel
+yum install zlib
+yum install zlib-devel
+4解压并安装nginx 加入fastdfs-nginx-module
+cd  /usr/local/software
+tar -zxvf nginx-1.6.2.tar.gz -C /usr/local/
+cd /usr/local/nginx-1.6.2
+加入模块命令 ./configure --add-module=/usr/local/fast/fastdfs-ngnix-module/src/
+编译安装 make && make install
+5复制fastdfs-nginx-module中的配置文件 到 /etc/fdfs/
+cd /usr/local/fast/fastdfs-ngnix-module/src/
+cp /usr/local/fast/fastdfs-ngnix-module/src/mod_fastdfs.conf /etc/fdfs/
+cd /etc/fdfs
+vim /etc/fdfs/mod_fastdfs.conf
+第一组175,176 和第二组177,178 组名不同
+connect_timeout=10
+tracker_server=192.168.1.173:22122
+tracker_server=192.168.1.174:22122
+storage_server_port=23000
+url_have_group_name=true
+store_path_count=1
+store_path0=/fastdfs/storage
+group_name=group1
+group_count=2
+6复制 /usr/local/fast/FastDFS/conf/ 下的http.conf 和 mime.types
+复制到/etc/fdfs中
+cd  /usr/local/fast/FastDFS/conf/
+cp http.conf mime.types /etc/fdfs/
+7创建软连接
+在 /fastdfs/storage 创建软连接
+ln -s /fastdfs/storage/data/ /fastdfs/storage/data/M00
+8修改nginx配置文件，所有节点都一致
+cd /usr/local/nginx/conf/
+vim ngnix.conf
+listen 8888;
+server_name localhost;
+
+location ~/group([0-9])/M00{
+	ngx_fastdfs_module;
+}
+9检查防火墙 启用nginx服务
+/usr/local/nginx/sbin/nginx -s start 
+10http://192.168.1.175:8888/group1/M00/00/00/文件
+访问哪一个节点都一样
+第六部分 跟踪器安装nginx 提供反向代理服务，目的是使用同一的ip服务地址对外提供服务
+173,174
+1 上传nginx缓存模块 ngx_cache_purge-2.3.tar.gz 解压
+tar -zxvf ngx_cache_purge-2.3.tar.gz -C /usr/local/fast/
+2yum install pcre
+yum install pcre-devel
+yum install zlib
+yum install zlib-devel
+3解压并安装ngnix 加入ngx_cache_purge
+cd  /usr/local/software
+tar -zxvf nginx-1.6.2.tar.gz -C /usr/local/
+cd /usr/local/nginx-1.6.2/
+加入模块命令 ./configure --add-module=/usr/local/fast/ngx_cache_purge-2.3
+编译安装 make && make install
+4配置nginx负载均衡和缓存   173和174一样
+vim /usr/local/nginx/conf/nginx.conf
+修改很多
+重要的 
+缓存配置 目的是缓存
+upstream fdfs_group1{
+	server 192.168.1.175:8888 weight=1 max_fails=2 fail_timeout=30s;
+	server 192.168.1.176:8888 weight=1 max_fails=2 fail_timeout=30s;
+}
+upstream fdfs_group2{
+	server 192.168.1.177:8888 weight=1 max_fails=2 fail_timeout=30s;
+	server 192.168.1.178:8888 weight=1 max_fails=2 fail_timeout=30s;
+}
+server{
+	listen 8000;			开放8000端口
+	server_name localhost;
+	location /group1/M00{
+		...
+		proxy_pass http://fdfs_group1;走上面的负载均衡器
+	}
+	location /group2/M00{
+		...
+		proxy_pass http://fdfs_group2;走上面的负载均衡器
+	}
+	清除缓存
+}
+
+5创建上面的缓存使用目录
+
+6检查防火墙 启用nginx服务
+/usr/local/nginx/sbin/nginx -s start 
+ps -el | grep nginx
+7上传文件
+/usr/bin/fdfs_upload_file /etc/fdfs/client.conf /usr/local/software/aa.doc
+http://192.168.1.173:8000/group1/M00/00/01/返回的id文件
+http://192.168.1.174:8000/group2/M00/00/00/返回的id文件
+测试成功，俩个ngnix都可以进行下载，反向代理成功
+访问哪一个节点都一样
+第七部分 
+需要keepalived 虚拟出一个vip ，对俩台跟踪器做高可用配置
+1开启2台nginx+keepalived 也就是173,174再做一次负载均衡即可，实现分布式的高可用文件系统
+cd /usr/local/nginx/conf/ && ||
+vim /usr/local/nginx/conf/nginx.conf
+也可单独配一层来虚拟连接73,74也可以在73,74上虚拟 119,120上虚拟
+119,120都装nginx+keepalived 虚拟出一个vip
+upstream fastdfs_tracker{
+	server 192.168.1.173:8000 weight=1 max_fails=2 fail_timeout=30s;
+	server 192.168.1.174:8000 weight=1 max_fails=2 fail_timeout=30s;
+}
+代理路径
+server{
+	listen 80;
+	server_name localhost;
+	location /fastdfs{
+	root html;
+	...
+	proxy_pass http://fastdfs_tracker/; 上面的集群配置
+	proxy_set_header Host $http_host;
+	proxy_set_header Cookie $http_cookie;
+	proxy_set_header X-Real-IP $remote_addr;
+	proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+	proxy_set_header X-Forwarded-Proto $scheme;
+	client_max_body_size 300m;
+
+}
+
+}
+
+需要把这个配置文件分别上传到带有keepalived的节点119,120
+放入/usr/local/nginx/conf/上面的配置文件
+service keepalived stop
+一级一级关闭
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
